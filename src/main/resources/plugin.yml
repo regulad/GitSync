@@ -1,0 +1,7 @@
+name: ${project.name}
+version: ${project.version}
+description: ${project.description}
+author: regulad
+
+main: ${project.groupId}.${project.artifactId}.${project.name}
+api-version: 1.17
