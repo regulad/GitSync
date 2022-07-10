@@ -1,7 +1,19 @@
-name: ${project.name}
-version: ${project.version}
-description: ${project.description}
-author: regulad
-
-main: ${project.groupId}.${project.artifactId}.${project.name}
-api-version: 1.17
+name: GitSync
+main: gitsync.GitSync
+version: r/1.0
+api-version: 1.13
+commands:
+  gsreload:
+    description: Reloads plugin GitSync
+    usage: /gsreload
+    aliases: [gsr]
+  gssync:
+    description: Tries to sync some repo with remote
+    usage: /gssync [repo_name]
+    aliases: [gss]
+  gspush:
+    description: Push force some repo to remote. Will overwrite changes in remote
+    usage: /gspush [repo_name]
+  gspull:
+    description: Pull to some repo from remote. Will fail if there are conflict changes
+    usage: /gspull [repo_name]
