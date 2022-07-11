@@ -2,11 +2,8 @@ name: GitSync
 main: gitsync.GitSync
 version: r/1.0
 api-version: 1.13
+author: regulad
 commands:
-  gsreload:
-    description: Reloads plugin GitSync
-    usage: /gsreload
-    aliases: [gsr]
   gssync:
     description: Tries to sync some repo with remote
     usage: /gssync [repo_name]

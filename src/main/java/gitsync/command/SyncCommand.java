@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 public class SyncCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender commandSender, Command command, String s, String[] args) {
         if (commandSender.hasPermission("gs.sync")) {
-            RepoService repoService = new RepoService();
             if (args.length == 0) {
                 commandSender.sendMessage(ChatColor.DARK_RED + "Should be specified one of repos to push!");
                 return false;
@@ -36,7 +35,7 @@ public class SyncCommand implements CommandExecutor, TabCompleter {
                 return false;
             }
 
-            repoService.addChangesToCommit(repository, GitSync.getInstance().getLogger());
+            RepoService.add(repository);
             if (args.length > 2 && args[1].equals("message")) {
                 List<String> argsWithoutFirstTwo = new ArrayList<>(Arrays.asList(args));
                 argsWithoutFirstTwo.remove(0);
@@ -48,12 +47,12 @@ public class SyncCommand implements CommandExecutor, TabCompleter {
                     part = var9.next();
                 }
 
-                repoService.createCommit(repository, GitSync.getInstance().getLogger(), "'[server update]' " + customMessage);
+                RepoService.commit(repository, "'[server update]' " + customMessage);
             } else {
-                repoService.createCommit(repository, GitSync.getInstance().getLogger(), "'[server update]'");
+                RepoService.commit(repository, "'[server update]'");
             }
 
-            if (repoService.favorableSync(repository, GitSync.getInstance().getLogger())) {
+            if (RepoService.favorableSync(repository)) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("Sync for %s repo successfully applied", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Sync for %s repo successfully applied. Applier: %s", repository.getName(), commandSender.getName()));

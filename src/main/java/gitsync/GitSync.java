@@ -2,7 +2,6 @@ package gitsync;
 
 import gitsync.command.ForcePushCommand;
 import gitsync.command.PullCommand;
-import gitsync.command.ReloadCommand;
 import gitsync.command.SyncCommand;
 import lombok.Getter;
 import org.bstats.bukkit.Metrics;
@@ -25,24 +24,21 @@ public class GitSync extends JavaPlugin {
     public void onEnable() {
         new Metrics(this, 14817);
         instance = this;
-        this.loadDataIntoMemory();
-        getLogger().info(String.format("Running with git version %s", RepoService.executeCommand(new ProcessBuilder("git", "version")).stream().findFirst().orElse("unknown")));
-        RepoService repoService = new RepoService();
-        repoService.dailySync(this.getLogger());
-        this.getCommand("gsreload").setExecutor(new ReloadCommand());
+        this.setup();
+        getLogger().info(String.format("Running with git version %s", RepoService.executeCommand("git", "version").stream().findFirst().orElse("unknown")));
+        RepoService.dailySync();
         this.getCommand("gssync").setExecutor(new SyncCommand());
         this.getCommand("gspush").setExecutor(new ForcePushCommand());
         this.getCommand("gspull").setExecutor(new PullCommand());
     }
 
-    public void loadDataIntoMemory() {
+    public void setup() {
         Config.clear();
         File configFile = this.checkConfig(this.getDataFolder());
         this.loadConfig(configFile, this.getDataFolder().getParentFile());
-        RepoService repoService = new RepoService();
-        repoService.createReposWhereNeeded(this.getDataFolder().getParentFile(), this.getLogger());
-        repoService.linkRemotesAndLocals(this.getLogger());
-        repoService.recreateGitIgnores(this.getLogger());
+        RepoService.createReposWhereNeeded(this.getDataFolder().getParentFile());
+        RepoService.linkRemotesAndLocals();
+        RepoService.recreateGitIgnores();
     }
 
     private File checkConfig(File directory) {

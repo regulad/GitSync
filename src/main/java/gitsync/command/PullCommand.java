@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 public class PullCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender commandSender, Command command, String s, String[] args) {
         if (commandSender.hasPermission("gs.pull")) {
-            RepoService repoService = new RepoService();
             if (args.length == 0) {
                 commandSender.sendMessage(ChatColor.DARK_RED + "Should be specified one of repos to pull!");
                 return false;
@@ -37,36 +36,36 @@ public class PullCommand implements CommandExecutor, TabCompleter {
             }
 
             GitSync.getInstance().getLogger().info(String.format("Trying to pull. Applier: %s", commandSender.getName()));
-            repoService.addChangesToCommit(repository, GitSync.getInstance().getLogger());
-            repoService.createCommit(repository, GitSync.getInstance().getLogger(), "'[server update]'");
-            List<String> output = repoService.pull(repository, GitSync.getInstance().getLogger());
-            if (repoService.isOutputContains(output, "Automatic merge failed")) {
+            RepoService.add(repository);
+            RepoService.commit(repository, "'[server update]'");
+            List<String> output = RepoService.pull(repository);
+            if (RepoService.isOutputContains(output, "Automatic merge failed")) {
                 var10001 = ChatColor.DARK_RED;
                 commandSender.sendMessage("" + var10001 + String.format("Can't merge remote and local to sync them, will abort merge for %s", repository.getName()));
-                repoService.abortMerge(repository, GitSync.getInstance().getLogger());
+                RepoService.abortMerge(repository);
                 var10001 = ChatColor.YELLOW;
                 commandSender.sendMessage("" + var10001 + String.format("Merge for pull of %s is aborted, use manual push and pull again", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Automatic merge failed and aborted for %s. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (repoService.isOutputContains(output, "Automatic merge went well; stopped before committing as requested")) {
-                repoService.createCommit(repository, GitSync.getInstance().getLogger(), "'[merged]'");
-                repoService.push(repository, GitSync.getInstance().getLogger());
+            if (RepoService.isOutputContains(output, "Automatic merge went well; stopped before committing as requested")) {
+                RepoService.commit(repository, "'[merged]'");
+                RepoService.push(repository, false, false);
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("Successful pull of %s to local repo, also automatic merge and push applied", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Successful pull of %s to local repo, also automatic merge and push applied. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (repoService.isOutputContains(output, "files changed") || repoService.isOutputContains(output, "file changed")) {
+            if (RepoService.isOutputContains(output, "files changed") || RepoService.isOutputContains(output, "file changed")) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("Successful pull of %s to local repo", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Successful pull of %s to local repo. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (repoService.isOutputContains(output, "Already up to date.")) {
+            if (RepoService.isOutputContains(output, "Already up to date.")) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("No changes in remote repo of %s detected. Local repos is already up-to-date", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("No changes in remote repo of %s detected. Local repos is already up-to-date. Applier: %s", repository.getName(), commandSender.getName()));

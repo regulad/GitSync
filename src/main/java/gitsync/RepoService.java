@@ -32,6 +32,17 @@ public class RepoService {
     private static final String NO_PERMISSION_OR_NO_REPO = "remote: The project you were looking for could not be found or you don't have permission to view it.";
     public static final String FAILED_TO_PUSH_SOME_REFS = "failed to push some refs";
 
+    private RepoService() {
+    }
+
+    public static Logger getLogger() {
+        return GitSync.getInstance().getLogger();
+    }
+
+    public static void printOutput(List<String> output) {
+        output.forEach((string) -> getLogger().warning(String.format("git output > %s", string)));
+    }
+
     public static List<String> executeCommand(ProcessBuilder processBuilder) {
         List<String> output = new ArrayList<>();
 
@@ -49,225 +60,27 @@ public class RepoService {
         return output;
     }
 
-
-    public void createReposWhereNeeded(File dirWithPlugins, Logger logger) {
-
-        for (Repository repository : Config.getInstance().getRepositories()) {
-            if (repository.isEnabled() && !repository.isLocalRepoCreated()) {
-                File file = new File(dirWithPlugins, repository.getName());
-                logger.info(String.format("Creating local repo for %s", file.getName()));
-                ProcessBuilder processBuilder = new ProcessBuilder("git", "init");
-                processBuilder.directory(file.getAbsoluteFile());
-                List<String> output = executeCommand(processBuilder);
-                if (this.isOutputContains(output, SUCCESS_GIT_INIT)) {
-                    logger.info(String.format("Created local repo for %s", file.getName()));
-                    repository.setLocalRepoCreated(true);
-                } else {
-                    logger.warning(String.format("Something got wrong while initializing local repo for %s", file.getName()));
-                }
-            }
-        }
-
+    public static List<String> executeCommand(String... command) {
+        return executeCommand(new ProcessBuilder(command));
     }
 
-    public void recreateGitIgnores(Logger logger) {
-
-        for (Repository repository : Config.getInstance().getRepositories()) {
-            if (repository.isEnabled() && repository.isLocalRepoCreated()) {
-                File gitIgnore = new File(repository.getDirectory(), ".gitignore");
-                logger.info(String.format("Recreating .gitignore for repo %s ...", repository.getName()));
-                if (gitIgnore.exists()) {
-                    gitIgnore.delete();
-                }
-
-                if (!repository.getIgnoreList().isEmpty()) {
-                    try {
-                        gitIgnore.createNewFile();
-                    } catch (IOException var7) {
-                        logger.warning(String.format("Cannot create .gitignore file for repo %s", repository.getName()));
-                        return;
-                    }
-
-                    try {
-                        Files.write(Paths.get(gitIgnore.toURI()), repository.getIgnoreList(), StandardCharsets.UTF_8, StandardOpenOption.WRITE);
-                    } catch (IOException var6) {
-                        logger.warning(String.format("Cannot write into .gitignore file for repo %s", repository.getName()));
-                    }
-                }
-
-                logger.info(String.format("Recreated .gitignore for repo %s", repository.getName()));
-            }
-        }
-
+    public static List<String> executeCommand(String[] command, File workingDirectory) {
+        return executeCommand(new ProcessBuilder(command).directory(workingDirectory));
     }
 
-    public void linkRemotesAndLocals(Logger logger) {
-
-        for (Repository repository : Config.getInstance().getRepositories()) {
-            if (repository.isEnabled() && repository.isLocalRepoCreated() && !repository.getRemote().equals("empty")) {
-                logger.info(String.format("Linking local and remote for %s", repository.getName()));
-                ProcessBuilder processBuilder = new ProcessBuilder("git", "remote");
-                processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-                List<String> output = this.executeCommand(processBuilder);
-                if (this.isOutputContains(output, REMOTE_PRESENT)) {
-                    logger.info(String.format("Local and remote for %s already linked", repository.getName()));
-                } else {
-                    processBuilder = new ProcessBuilder("git", "remote", "add", "origin", repository.getRemote()); // Authentication stuff will probably go here
-                    processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-                    this.executeCommand(processBuilder);
-                    logger.info(String.format("Linked local and remote for %s", repository.getName()));
-                }
-            }
-        }
-
-    }
-
-    public void dailySync(Logger logger) {
-
-        for (Repository o : Config.getInstance().getRepositories()) {
-            if (o.isEnabled() && o.isLocalRepoCreated()) {
-                this.addChangesToCommit(o, logger);
-                this.createCommit(o, logger, SERVER_COMMIT_TO_MAKE);
-                if (!o.getRemote().equals("empty")) {
-                    switch (Config.getInstance().getScenarioWhileDailySync()) {
-                        case ALL:
-                            if (!this.favorableSync(o, logger)) {
-                                this.unfavorableSync(o, logger);
-                            }
-                            break;
-                        case FAVORABLE:
-                            this.favorableSync(o, logger);
-                            break;
-                        case FORCE:
-                            this.unfavorableSync(o, logger);
-                    }
-                }
-            }
-        }
-
-    }
-
-    public void unfavorableSync(Repository repository, Logger logger) {
-        logger.info(String.format("Using force sync scenario for %s", repository.getName()));
-        List<String> output = this.pushForce(repository, logger);
-        if (this.isOutputContains(output, FORCED_UPDATE_SUCCESS)) {
-            logger.info(String.format("Force sync scenario successfully applied for %s", repository.getName()));
-        }
-
-    }
-
-    public boolean favorableSync(Repository repository, Logger logger) {
-        List<String> output = this.pull(repository, logger);
-        printOutput(output, logger);
-        if (this.isOutputContains(output, NO_TRACKED_BRANCH)) {
-            logger.info(String.format("There is no ref to remote master for %s, will try to push with upstream.", repository.getName()));
-            output = this.pushWithUpstream(repository, logger);
-            if (this.isOutputContains(output, SUCCESS_LINK)) {
-                logger.info(String.format("Masters of remote and local are linked for %s (no ref to master was there)", repository.getName()));
-                return true;
-            }
-        }
-
-        if (this.isOutputContains(output, AUTOMATIC_MERGE_FAILED)) {
-            logger.info(String.format("Can't merge remote and local to sync them, will abort merge for %s", repository.getName()));
-            this.abortMerge(repository, logger);
-            logger.info(String.format("Merge for synchronization of %s is aborted, use manual push and pull or enable both scenarios", repository.getName()));
-            return false;
-        } else if (this.isOutputContains(output, NO_PERMISSION_OR_NO_REPO)) {
-            logger.info(String.format("Can't pull or push because of lack of permission, or such remote repo for %s is not exists", repository.getName()));
-            return false;
-        } else {
-            if (this.isOutputContains(output, NO_REF_TO_MASTER)) {
-                output = this.pushWithUpstream(repository, logger);
-                if (this.isOutputContains(output, SUCCESS_LINK)) {
-                    logger.info(String.format("Masters of remote and local are linked for %s", repository.getName()));
-                    return true;
-                }
-            }
-
-            if (this.isOutputContains(output, AUTOMATIC_MERGE_SUCCESS)) {
-                this.createCommit(repository, logger, "'[merged]'");
-                this.push(repository, logger);
-                return true;
-            } else if (!this.isOutputContains(output, NO_UPDATES_FROM_LOCAL_MANY) && !this.isOutputContains(output, NO_UPDATES_FROM_LOCAL_ONE)) {
-                if (this.isOutputContains(output, NO_UPDATES_FROM_REMOTE)) {
-                    logger.info(String.format("No changes in remote repo of %s detected, just pushing from server...", repository.getName()));
-                    output = this.push(repository, logger);
-                    if (this.isOutputContains(output, NO_CHANGES_TO_PUSH)) {
-                        logger.info(String.format("There are no changes to push to remote for %s", repository.getName()));
-                    } else {
-                        logger.info(String.format("Changes from server pushed to remote for %s", repository.getName()));
-                    }
-
-                    return true;
-                } else {
-                    return false;
-                }
-            } else {
-                logger.info(String.format("Changes just pulled from remote repo to local for %s", repository.getName()));
-                return true;
-            }
-        }
-    }
-
-    public static void printOutput(List<String> output, Logger logger) {
-        output.forEach((string) -> logger.info(String.format("OUTPUT > %s", string)));
-    }
-
-    public void abortMerge(Repository repository, Logger logger) {
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "merge", "--abort");
-        processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        executeCommand(processBuilder);
-    }
-
-    public List<String> pull(Repository repository, Logger logger) {
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "pull", "--no-commit", "origin", "master");
-        processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        return executeCommand(processBuilder);
-    }
-
-    public List<String> push(Repository repository, Logger logger) {
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "push", "origin", "master");
-        processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        return executeCommand(processBuilder);
-    }
-
-    public List<String> pushForce(Repository repository, Logger logger) {
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "push", "-f", "origin", "master");
-        processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        List<String> output = executeCommand(processBuilder);
-        printOutput(output, logger);
+    public static List<String> runCommand(String... command) {
+        List<String> output = executeCommand(command);
+        printOutput(output);
         return output;
     }
 
-    private List<String> pushWithUpstream(Repository repository, Logger logger) {
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "push", "--set-upstream", "origin", "master");
-        processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        return executeCommand(processBuilder);
+    public static List<String> runCommand(String[] command, File workingDirectory) {
+        List<String> output = executeCommand(command, workingDirectory);
+        printOutput(output);
+        return output;
     }
 
-    public void addChangesToCommit(Repository repository, Logger logger) {
-        logger.info(String.format("Adding changes to future commit for %s", repository.getName()));
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "add", ".");
-        processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        executeCommand(processBuilder);
-        logger.info(String.format("Added changes to future commit for %s", repository.getName()));
-    }
-
-    public void createCommit(Repository repository, Logger logger, String message) {
-        logger.info(String.format("Creating commit for latest changes for %s", repository.getName()));
-        ProcessBuilder processBuilder = new ProcessBuilder("git", "commit", "-m", message);
-        processBuilder.directory(repository.getDirectory());
-        List<String> output = executeCommand(processBuilder);
-        if (this.isOutputContains(output, SERVER_COMMIT_TO_FIND)) {
-            logger.info(String.format("Created commit for latest changes for %s", repository.getName()));
-        } else {
-            logger.info(String.format("There are no changes to commit for %s", repository.getName()));
-        }
-
-    }
-
-    public boolean isOutputContains(List<String> outputToScan, String string) {
+    public static boolean isOutputContains(List<String> outputToScan, String string) {
         Iterator<String> var3 = outputToScan.iterator();
 
         String out;
@@ -280,5 +93,210 @@ public class RepoService {
         } while (!out.contains(string));
 
         return true;
+    }
+
+    // Helpers
+    public static void abortMerge(Repository repository) {
+        runCommand(new String[]{"git", "merge", "--abort"}, repository.getDirectory().getAbsoluteFile());
+    }
+
+    public static List<String> pull(Repository repository) {
+        return runCommand(new String[]{"git", "pull", "--no-commit", "origin", "master"}, repository.getDirectory().getAbsoluteFile());
+    }
+
+    public static List<String> push(Repository repository, boolean setUpstream, boolean force) {
+        ArrayList<String> args = new ArrayList<>();
+
+        args.add("git");
+        args.add("push");
+        if (setUpstream) {
+            args.add("--set-upstream");
+        }
+        if (force) {
+            args.add("-f");
+        }
+        args.add("origin");
+        args.add("master");
+
+        return runCommand(args.toArray(String[]::new), repository.getDirectory().getAbsoluteFile());
+    }
+
+    public static void add(Repository repository) {
+        runCommand(new String[]{"git", "add", "."}, repository.getDirectory().getAbsoluteFile());
+    }
+
+    /**
+     * Commits added changes to the repository.
+     * @return If any changes were committed.
+     */
+    public static boolean commit(Repository repository, String message) {
+        List<String> output = runCommand(new String[]{"git", "commit", "-m", message}, repository.getDirectory());
+        return isOutputContains(output, SERVER_COMMIT_TO_FIND);
+    }
+
+    public static void configure(Repository repository, String item, String value) {
+        runCommand(new String[]{"git", "config", item, value}, repository.getDirectory());
+    }
+
+    public static boolean init(Repository repository) {
+        List<String> output = runCommand(new String[]{"git", "init"}, repository.getDirectory());
+        final boolean isSuccess = isOutputContains(output, SUCCESS_GIT_INIT);
+        if (isSuccess) {
+            configure(repository, "user.name", "GitSync");
+            configure(repository, "user.email", "gitsync@regulad.xyz");
+        }
+        return isSuccess;
+    }
+
+    // Tasks
+    public static void createReposWhereNeeded(File pluginDirectory) {
+        for (Repository repository : Config.getInstance().getRepositories()) {
+            if (repository.isEnabled() && !repository.isLocalRepoCreated()) {
+                File file = new File(pluginDirectory, repository.getName());
+                getLogger().info(String.format("Creating local repo for %s", file.getName()));
+                if (init(repository)) {
+                    repository.setLocalRepoCreated(true);
+                    getLogger().info(String.format("Created local repo for %s", file.getName()));
+                } else {
+                    getLogger().severe(String.format("Something got wrong while initializing local repo for %s", file.getName()));
+                }
+            }
+        }
+
+    }
+
+    public static void recreateGitIgnores() {
+        for (Repository repository : Config.getInstance().getRepositories()) {
+            if (repository.isEnabled() && repository.isLocalRepoCreated()) {
+                File gitIgnore = new File(repository.getDirectory(), ".gitignore");
+                GitSync.getInstance().getLogger().info(String.format("Recreating .gitignore for repo %s ...", repository.getName()));
+                if (gitIgnore.exists()) {
+                    gitIgnore.delete();
+                }
+
+                if (!repository.getIgnoreList().isEmpty()) {
+                    try {
+                        gitIgnore.createNewFile();
+                    } catch (IOException var7) {
+                        GitSync.getInstance().getLogger().warning(String.format("Cannot create .gitignore file for repo %s", repository.getName()));
+                        return;
+                    }
+
+                    try {
+                        Files.write(Paths.get(gitIgnore.toURI()), repository.getIgnoreList(), StandardCharsets.UTF_8, StandardOpenOption.WRITE);
+                    } catch (IOException var6) {
+                        GitSync.getInstance().getLogger().warning(String.format("Cannot write into .gitignore file for repo %s", repository.getName()));
+                    }
+                }
+
+                GitSync.getInstance().getLogger().info(String.format("Recreated .gitignore for repo %s", repository.getName()));
+            }
+        }
+
+    }
+
+    public static void linkRemotesAndLocals() {
+        for (Repository repository : Config.getInstance().getRepositories()) {
+            if (repository.isEnabled() && repository.isLocalRepoCreated() && !repository.getRemote().equals("empty")) {
+                GitSync.getInstance().getLogger().info(String.format("Linking local and remote for %s", repository.getName()));
+                ProcessBuilder processBuilder = new ProcessBuilder("git", "remote");
+                processBuilder.directory(repository.getDirectory().getAbsoluteFile());
+                List<String> output = executeCommand(processBuilder);
+                if (isOutputContains(output, REMOTE_PRESENT)) {
+                    GitSync.getInstance().getLogger().info(String.format("Local and remote for %s already linked", repository.getName()));
+                } else {
+                    processBuilder = new ProcessBuilder("git", "remote", "add", "origin", repository.getRemote()); // Authentication stuff will probably go here
+                    processBuilder.directory(repository.getDirectory().getAbsoluteFile());
+                    executeCommand(processBuilder);
+                    GitSync.getInstance().getLogger().info(String.format("Linked local and remote for %s", repository.getName()));
+                }
+            }
+        }
+
+    }
+
+    public static void dailySync() {
+        for (Repository o : Config.getInstance().getRepositories()) {
+            if (o.isEnabled() && o.isLocalRepoCreated()) {
+                add(o);
+                commit(o, SERVER_COMMIT_TO_MAKE);
+                if (!o.getRemote().equals("empty")) {
+                    switch (Config.getInstance().getScenarioWhileDailySync()) {
+                        case ALL:
+                            if (!favorableSync(o)) {
+                                unfavorableSync(o);
+                            }
+                            break;
+                        case FAVORABLE:
+                            favorableSync(o);
+                            break;
+                        case FORCE:
+                            unfavorableSync(o);
+                    }
+                }
+            }
+        }
+
+    }
+
+    public static void unfavorableSync(Repository repository) {
+        GitSync.getInstance().getLogger().info(String.format("Using force sync scenario for %s", repository.getName()));
+        List<String> output = push(repository, false, true);
+        if (isOutputContains(output, FORCED_UPDATE_SUCCESS)) {
+            GitSync.getInstance().getLogger().info(String.format("Force sync scenario successfully applied for %s", repository.getName()));
+        }
+    }
+
+    public static boolean favorableSync(Repository repository) {
+        List<String> output = pull(repository);
+        if (isOutputContains(output, NO_TRACKED_BRANCH)) {
+            GitSync.getInstance().getLogger().info(String.format("There is no ref to remote master for %s, will try to push with upstream.", repository.getName()));
+            output = push(repository, true, false);
+            if (isOutputContains(output, SUCCESS_LINK)) {
+                GitSync.getInstance().getLogger().info(String.format("Masters of remote and local are linked for %s (no ref to master was there)", repository.getName()));
+                return true;
+            }
+        }
+
+        if (isOutputContains(output, AUTOMATIC_MERGE_FAILED)) {
+            GitSync.getInstance().getLogger().info(String.format("Can't merge remote and local to sync them, will abort merge for %s", repository.getName()));
+            abortMerge(repository);
+            GitSync.getInstance().getLogger().info(String.format("Merge for synchronization of %s is aborted, use manual push and pull or enable both scenarios", repository.getName()));
+            return false;
+        } else if (isOutputContains(output, NO_PERMISSION_OR_NO_REPO)) {
+            GitSync.getInstance().getLogger().info(String.format("Can't pull or push because of lack of permission, or such remote repo for %s is not exists", repository.getName()));
+            return false;
+        } else {
+            if (isOutputContains(output, NO_REF_TO_MASTER)) {
+                output = push(repository, true, false);
+                if (isOutputContains(output, SUCCESS_LINK)) {
+                    GitSync.getInstance().getLogger().info(String.format("Masters of remote and local are linked for %s", repository.getName()));
+                    return true;
+                }
+            }
+
+            if (isOutputContains(output, AUTOMATIC_MERGE_SUCCESS)) {
+                commit(repository, "'[merged]'");
+                push(repository, false, false);
+                return true;
+            } else if (!isOutputContains(output, NO_UPDATES_FROM_LOCAL_MANY) && !isOutputContains(output, NO_UPDATES_FROM_LOCAL_ONE)) {
+                if (isOutputContains(output, NO_UPDATES_FROM_REMOTE)) {
+                    GitSync.getInstance().getLogger().info(String.format("No changes in remote repo of %s detected, just pushing from server...", repository.getName()));
+                    output = push(repository, false, false);
+                    if (isOutputContains(output, NO_CHANGES_TO_PUSH)) {
+                        GitSync.getInstance().getLogger().info(String.format("There are no changes to push to remote for %s", repository.getName()));
+                    } else {
+                        GitSync.getInstance().getLogger().info(String.format("Changes from server pushed to remote for %s", repository.getName()));
+                    }
+
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                GitSync.getInstance().getLogger().info(String.format("Changes just pulled from remote repo to local for %s", repository.getName()));
+                return true;
+            }
+        }
     }
 }

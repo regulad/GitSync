@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 public class ForcePushCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender commandSender, Command command, String s, String[] args) {
         if (commandSender.hasPermission("gs.push")) {
-            RepoService repoService = new RepoService();
             if (args.length == 0) {
                 commandSender.sendMessage(ChatColor.DARK_RED + "Should be specified one of repos to push!");
                 return false;
@@ -37,7 +36,7 @@ public class ForcePushCommand implements CommandExecutor, TabCompleter {
             }
 
             GitSync.getInstance().getLogger().info(String.format("Trying to push force. Applier: %s", commandSender.getName()));
-            repoService.addChangesToCommit(repository, GitSync.getInstance().getLogger());
+            RepoService.add(repository);
             if (args.length > 2 && args[1].equals("message")) {
                 List<String> argsWithoutFirstTwo = new ArrayList<>(Arrays.asList(args));
                 argsWithoutFirstTwo.remove(0);
@@ -49,27 +48,27 @@ public class ForcePushCommand implements CommandExecutor, TabCompleter {
                     part = var9.next();
                 }
 
-                repoService.createCommit(repository, GitSync.getInstance().getLogger(), "'[server update]' " + customMessage);
+                RepoService.commit(repository, "'[server update]' " + customMessage);
             } else {
-                repoService.createCommit(repository, GitSync.getInstance().getLogger(), "'[server update]'");
+                RepoService.commit(repository, "'[server update]'");
             }
 
-            List<String> output = repoService.pushForce(repository, GitSync.getInstance().getLogger());
-            if (repoService.isOutputContains(output, "Everything up-to-date")) {
+            List<String> output = RepoService.push(repository, false, true);
+            if (RepoService.isOutputContains(output, "Everything up-to-date")) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("No forced changes in local repo of %s detected. Remote repos is already up-to-date", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("No changes forced in local repo of %s detected. Remote repos is already up-to-date. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (repoService.isOutputContains(output, "forced update")) {
+            if (RepoService.isOutputContains(output, "forced update")) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("Force push successfully applied for %s", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Force push successfully applied for %s. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (repoService.isOutputContains(output, "failed to push some refs")) {
+            if (RepoService.isOutputContains(output, "failed to push some refs")) {
                 var10001 = ChatColor.DARK_RED;
                 commandSender.sendMessage("" + var10001 + String.format("Not allowed to apply force push for %s (branch protected)", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Not allowed to apply force push for %s (branch protected). Applier: %s", repository.getName(), commandSender.getName()));
