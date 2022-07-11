@@ -32,6 +32,24 @@ public class RepoService {
     private static final String NO_PERMISSION_OR_NO_REPO = "remote: The project you were looking for could not be found or you don't have permission to view it.";
     public static final String FAILED_TO_PUSH_SOME_REFS = "failed to push some refs";
 
+    public static List<String> executeCommand(ProcessBuilder processBuilder) {
+        List<String> output = new ArrayList<>();
+
+        try {
+            Process process = processBuilder.start();
+            OutputReader outputReader = new OutputReader(process.getInputStream());
+            OutputReader errorReader = new OutputReader(process.getErrorStream());
+            int exit = process.waitFor();
+            output.addAll(outputReader.getOutput());
+            output.addAll(errorReader.getOutput());
+        } catch (InterruptedException | IOException var7) {
+            var7.printStackTrace();
+        }
+
+        return output;
+    }
+
+
     public void createReposWhereNeeded(File dirWithPlugins, Logger logger) {
 
         for (Repository repository : Config.getInstance().getRepositories()) {
@@ -40,7 +58,7 @@ public class RepoService {
                 logger.info(String.format("Creating local repo for %s", file.getName()));
                 ProcessBuilder processBuilder = new ProcessBuilder("git", "init");
                 processBuilder.directory(file.getAbsoluteFile());
-                List<String> output = this.executeCommand(processBuilder);
+                List<String> output = executeCommand(processBuilder);
                 if (this.isOutputContains(output, SUCCESS_GIT_INIT)) {
                     logger.info(String.format("Created local repo for %s", file.getName()));
                     repository.setLocalRepoCreated(true);
@@ -53,10 +71,8 @@ public class RepoService {
     }
 
     public void recreateGitIgnores(Logger logger) {
-        Iterator<Repository> var2 = Config.getInstance().getRepositories().iterator();
 
-        while (var2.hasNext()) {
-            Repository repository = var2.next();
+        for (Repository repository : Config.getInstance().getRepositories()) {
             if (repository.isEnabled() && repository.isLocalRepoCreated()) {
                 File gitIgnore = new File(repository.getDirectory(), ".gitignore");
                 logger.info(String.format("Recreating .gitignore for repo %s ...", repository.getName()));
@@ -142,7 +158,7 @@ public class RepoService {
 
     public boolean favorableSync(Repository repository, Logger logger) {
         List<String> output = this.pull(repository, logger);
-        this.printOutput(output, logger);
+        printOutput(output, logger);
         if (this.isOutputContains(output, NO_TRACKED_BRANCH)) {
             logger.info(String.format("There is no ref to remote master for %s, will try to push with upstream.", repository.getName()));
             output = this.pushWithUpstream(repository, logger);
@@ -194,47 +210,47 @@ public class RepoService {
         }
     }
 
-    public void printOutput(List<String> output, Logger logger) {
+    public static void printOutput(List<String> output, Logger logger) {
         output.forEach((string) -> logger.info(String.format("OUTPUT > %s", string)));
     }
 
     public void abortMerge(Repository repository, Logger logger) {
         ProcessBuilder processBuilder = new ProcessBuilder("git", "merge", "--abort");
         processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        this.executeCommand(processBuilder);
+        executeCommand(processBuilder);
     }
 
     public List<String> pull(Repository repository, Logger logger) {
         ProcessBuilder processBuilder = new ProcessBuilder("git", "pull", "--no-commit", "origin", "master");
         processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        return this.executeCommand(processBuilder);
+        return executeCommand(processBuilder);
     }
 
     public List<String> push(Repository repository, Logger logger) {
         ProcessBuilder processBuilder = new ProcessBuilder("git", "push", "origin", "master");
         processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        return this.executeCommand(processBuilder);
+        return executeCommand(processBuilder);
     }
 
     public List<String> pushForce(Repository repository, Logger logger) {
         ProcessBuilder processBuilder = new ProcessBuilder("git", "push", "-f", "origin", "master");
         processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        List<String> output = this.executeCommand(processBuilder);
-        this.printOutput(output, logger);
+        List<String> output = executeCommand(processBuilder);
+        printOutput(output, logger);
         return output;
     }
 
     private List<String> pushWithUpstream(Repository repository, Logger logger) {
         ProcessBuilder processBuilder = new ProcessBuilder("git", "push", "--set-upstream", "origin", "master");
         processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        return this.executeCommand(processBuilder);
+        return executeCommand(processBuilder);
     }
 
     public void addChangesToCommit(Repository repository, Logger logger) {
         logger.info(String.format("Adding changes to future commit for %s", repository.getName()));
         ProcessBuilder processBuilder = new ProcessBuilder("git", "add", ".");
         processBuilder.directory(repository.getDirectory().getAbsoluteFile());
-        this.executeCommand(processBuilder);
+        executeCommand(processBuilder);
         logger.info(String.format("Added changes to future commit for %s", repository.getName()));
     }
 
@@ -242,30 +258,13 @@ public class RepoService {
         logger.info(String.format("Creating commit for latest changes for %s", repository.getName()));
         ProcessBuilder processBuilder = new ProcessBuilder("git", "commit", "-m", message);
         processBuilder.directory(repository.getDirectory());
-        List<String> output = this.executeCommand(processBuilder);
+        List<String> output = executeCommand(processBuilder);
         if (this.isOutputContains(output, SERVER_COMMIT_TO_FIND)) {
             logger.info(String.format("Created commit for latest changes for %s", repository.getName()));
         } else {
             logger.info(String.format("There are no changes to commit for %s", repository.getName()));
         }
 
-    }
-
-    private List<String> executeCommand(ProcessBuilder processBuilder) {
-        List<String> output = new ArrayList<>();
-
-        try {
-            Process process = processBuilder.start();
-            OutputReader outputReader = new OutputReader(process.getInputStream());
-            OutputReader errorReader = new OutputReader(process.getErrorStream());
-            int exit = process.waitFor();
-            output.addAll(outputReader.getOutput());
-            output.addAll(errorReader.getOutput());
-        } catch (InterruptedException | IOException var7) {
-            var7.printStackTrace();
-        }
-
-        return output;
     }
 
     public boolean isOutputContains(List<String> outputToScan, String string) {

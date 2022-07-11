@@ -26,6 +26,7 @@ public class GitSync extends JavaPlugin {
         new Metrics(this, 14817);
         instance = this;
         this.loadDataIntoMemory();
+        getLogger().info(String.format("Running with git version %s", RepoService.executeCommand(new ProcessBuilder("git", "version")).stream().findFirst().orElse("unknown")));
         RepoService repoService = new RepoService();
         repoService.dailySync(this.getLogger());
         this.getCommand("gsreload").setExecutor(new ReloadCommand());
