@@ -1,6 +1,6 @@
 name: GitSync
 main: gitsync.GitSync
-version: r/1.0
+version: ${project.version}
 api-version: 1.13
 author: regulad
 commands:

@@ -1,9 +1,8 @@
 package gitsync.command;
 
-import gitsync.Config;
 import gitsync.GitSync;
-import gitsync.RepoService;
 import gitsync.Repository;
+import gitsync.utils.GitProcessUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -21,7 +20,7 @@ public class SyncCommand implements CommandExecutor, TabCompleter {
                 return false;
             }
 
-            Repository repository = Config.getInstance().findRepoByName(args[0]);
+            Repository repository = GitSync.Config.getInstance().findRepoByName(args[0]);
             ChatColor var10001;
             if (repository == null) {
                 var10001 = ChatColor.DARK_RED;
@@ -35,7 +34,7 @@ public class SyncCommand implements CommandExecutor, TabCompleter {
                 return false;
             }
 
-            RepoService.add(repository);
+            GitProcessUtil.add(repository);
             if (args.length > 2 && args[1].equals("message")) {
                 List<String> argsWithoutFirstTwo = new ArrayList<>(Arrays.asList(args));
                 argsWithoutFirstTwo.remove(0);
@@ -47,12 +46,12 @@ public class SyncCommand implements CommandExecutor, TabCompleter {
                     part = var9.next();
                 }
 
-                RepoService.commit(repository, "'[server update]' " + customMessage);
+                GitProcessUtil.commit(repository, "'[server update]' " + customMessage);
             } else {
-                RepoService.commit(repository, "'[server update]'");
+                GitProcessUtil.commit(repository, "'[server update]'");
             }
 
-            if (RepoService.favorableSync(repository)) {
+            if (GitProcessUtil.favorableSync(repository)) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("Sync for %s repo successfully applied", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Sync for %s repo successfully applied. Applier: %s", repository.getName(), commandSender.getName()));
@@ -70,7 +69,7 @@ public class SyncCommand implements CommandExecutor, TabCompleter {
 
     public List<String> onTabComplete(CommandSender commandSender, Command command, String s, String[] args) {
         if (commandSender.hasPermission("gs.sync")) {
-            List<String> reposNames = Config.getInstance().getRepositories().stream().filter((repository) -> repository.isEnabled() && !repository.getRemote().equals("empty")).map(Repository::getName).toList();
+            List<String> reposNames = GitSync.Config.getInstance().getRepositories().stream().filter((repository) -> repository.isEnabled() && !repository.getRemote().equals("empty")).map(Repository::getName).toList();
             if (args.length == 1) {
                 return reposNames.stream().filter((string) -> string.startsWith(args[0])).collect(Collectors.toList());
             }

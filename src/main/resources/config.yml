@@ -1,0 +1,13 @@
+dailySync: ALL
+quiet: true
+github:
+  enabled: false
+  token: ""
+plugins:
+  GitSync:
+    enabled: false
+    remote: "" # Remote to be registered
+    upstream: "origin" # Name of the upstream remote
+    branch: "master" # Name of the branch to be pushed to remote
+    username: "GitSync" # Username for commit message
+    email: "gitsync@regulad.xyz"

@@ -1,5 +1,7 @@
 package gitsync.utils;
 
+import lombok.RequiredArgsConstructor;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -7,12 +9,9 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
+@RequiredArgsConstructor
 public class OutputReader {
     private final InputStream inputStream;
-
-    public OutputReader(InputStream inputStream) {
-        this.inputStream = inputStream;
-    }
 
     public List<String> getOutput() {
         List<String> output = new ArrayList<>();

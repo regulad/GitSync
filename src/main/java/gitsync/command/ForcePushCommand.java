@@ -1,9 +1,9 @@
 package gitsync.command;
 
-import gitsync.Config;
 import gitsync.GitSync;
-import gitsync.RepoService;
 import gitsync.Repository;
+import gitsync.utils.ExeUtil;
+import gitsync.utils.GitProcessUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -21,7 +21,7 @@ public class ForcePushCommand implements CommandExecutor, TabCompleter {
                 return false;
             }
 
-            Repository repository = Config.getInstance().findRepoByName(args[0]);
+            Repository repository = GitSync.Config.getInstance().findRepoByName(args[0]);
             ChatColor var10001;
             if (repository == null) {
                 var10001 = ChatColor.DARK_RED;
@@ -36,7 +36,7 @@ public class ForcePushCommand implements CommandExecutor, TabCompleter {
             }
 
             GitSync.getInstance().getLogger().info(String.format("Trying to push force. Applier: %s", commandSender.getName()));
-            RepoService.add(repository);
+            GitProcessUtil.add(repository);
             if (args.length > 2 && args[1].equals("message")) {
                 List<String> argsWithoutFirstTwo = new ArrayList<>(Arrays.asList(args));
                 argsWithoutFirstTwo.remove(0);
@@ -48,27 +48,27 @@ public class ForcePushCommand implements CommandExecutor, TabCompleter {
                     part = var9.next();
                 }
 
-                RepoService.commit(repository, "'[server update]' " + customMessage);
+                GitProcessUtil.commit(repository, "'[server update]' " + customMessage);
             } else {
-                RepoService.commit(repository, "'[server update]'");
+                GitProcessUtil.commit(repository, "'[server update]'");
             }
 
-            List<String> output = RepoService.push(repository, false, true);
-            if (RepoService.isOutputContains(output, "Everything up-to-date")) {
+            List<String> output = GitProcessUtil.push(repository, false, true);
+            if (ExeUtil.isOutputContains(output, "Everything up-to-date")) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("No forced changes in local repo of %s detected. Remote repos is already up-to-date", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("No changes forced in local repo of %s detected. Remote repos is already up-to-date. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (RepoService.isOutputContains(output, "forced update")) {
+            if (ExeUtil.isOutputContains(output, "forced update")) {
                 var10001 = ChatColor.GREEN;
                 commandSender.sendMessage("" + var10001 + String.format("Force push successfully applied for %s", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Force push successfully applied for %s. Applier: %s", repository.getName(), commandSender.getName()));
                 return true;
             }
 
-            if (RepoService.isOutputContains(output, "failed to push some refs")) {
+            if (ExeUtil.isOutputContains(output, "failed to push some refs")) {
                 var10001 = ChatColor.DARK_RED;
                 commandSender.sendMessage("" + var10001 + String.format("Not allowed to apply force push for %s (branch protected)", repository.getName()));
                 GitSync.getInstance().getLogger().info(String.format("Not allowed to apply force push for %s (branch protected). Applier: %s", repository.getName(), commandSender.getName()));
@@ -87,7 +87,7 @@ public class ForcePushCommand implements CommandExecutor, TabCompleter {
 
     public List<String> onTabComplete(CommandSender commandSender, Command command, String s, String[] args) {
         if (commandSender.hasPermission("gs.push")) {
-            List<String> reposNames = Config.getInstance().getRepositories().stream().filter((repository) -> repository.isEnabled() && !repository.getRemote().equals("empty")).map(Repository::getName).toList();
+            List<String> reposNames = GitSync.Config.getInstance().getRepositories().stream().filter((repository) -> repository.isEnabled() && !repository.getRemote().equals("empty")).map(Repository::getName).toList();
             if (args.length == 1) {
                 return reposNames.stream().filter((string) -> string.startsWith(args[0])).collect(Collectors.toList());
             }
